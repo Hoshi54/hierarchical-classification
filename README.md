@@ -16,4 +16,5 @@ hierarchical classification + fastapi + docker
 # Для активации Docker
 
 $ docker build -t sklearn_fastapi_docker .
+
 $ docker run -p 8000:8000 sklearn_fastapi_docker
