@@ -3,25 +3,22 @@ from pydantic import BaseModel, constr
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import make_pipeline
+from sklearn.utils.validation import check_array, check_is_fitted
 import joblib
 
 app = FastAPI()
 
 class HierarchicalClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, base_classifier_for_cat1,base_classifier_for_cat2,base_classifier_for_cat3):
-        self.classifiers = {
-            'cat1': base_classifier_for_cat1,
-            'cat2': base_classifier_for_cat2,
-            'cat3': base_classifier_for_cat3
-        }
+    def __init__(self, base_classifier_for_cat1):
+        self.classifier = base_classifier_for_cat1
         self.classifiers_ = {}
 
     def fit(self, X, y_cat1, y_cat2, y_cat3):
-        print(1)
+
         self.classifiers_['Cat1'] = make_pipeline(
             TfidfVectorizer(max_features = 50000, min_df = 2),
-            clone(self.classifiers['cat1'])
-        ).fit(X, y_cat1)
+            clone(self.classifier)
+            ).fit(X, y_cat1)
 
         for category in y_cat1.unique():
             mask = y_cat1 == category
@@ -30,7 +27,7 @@ class HierarchicalClassifier(BaseEstimator, ClassifierMixin):
                 if len(y_subset.unique()) > 1:
                     classifier = make_pipeline(
                         TfidfVectorizer(max_features = 50000, min_df = 2),
-                        clone(self.classifiers['cat2'])
+                        clone(self.classifier)
                     )
                     self.classifiers_['Cat2_' + category] = classifier.fit(X[mask], y_subset)
                 else:
@@ -43,7 +40,7 @@ class HierarchicalClassifier(BaseEstimator, ClassifierMixin):
                 if len(y_subset.unique()) > 1:
                     classifier = make_pipeline(
                         TfidfVectorizer(max_features = 50000, min_df = 2),
-                        clone(self.classifiers['cat3'])
+                        clone(self.classifier)
                     )
                     self.classifiers_['Cat3_' + category] = classifier.fit(X[mask], y_subset)
                 else:
@@ -75,6 +72,7 @@ class HierarchicalClassifier(BaseEstimator, ClassifierMixin):
 
         return y_pred_cat1, y_pred_cat2, y_pred_cat3
 
+
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
@@ -92,9 +90,7 @@ y_val_cat1 = val_df['Cat1']
 y_val_cat2 = val_df['Cat2']
 y_val_cat3 = val_df['Cat3']
 
-hierarchical_clf = HierarchicalClassifier(base_classifier_for_cat1 = LogisticRegression(C = 1e2, n_jobs = 4, solver = 'lbfgs',multi_class='multinomial', random_state = 17,verbose = 0,fit_intercept = True,max_iter = 1000),
-                                          base_classifier_for_cat2 = LogisticRegression(C = 1e2, n_jobs = 4, solver = 'lbfgs',multi_class='multinomial', random_state = 17,verbose = 0,fit_intercept = True,max_iter = 1000),
-                                          base_classifier_for_cat3 = LogisticRegression(C = 1e2, n_jobs = 4, solver = 'lbfgs',multi_class='multinomial', random_state = 17,verbose = 0,fit_intercept = True,max_iter = 1000))
+hierarchical_clf = HierarchicalClassifier(base_classifier_for_cat1 = LogisticRegression(C = 1e2, n_jobs = 4, solver = 'lbfgs',multi_class='multinomial', random_state = 17,verbose = 0,fit_intercept = True))
 
 hierarchical_clf.fit(X_train, y_train_cat1, y_train_cat2, y_train_cat3)
 joblib.dump(hierarchical_clf,'model.joblib')
@@ -102,7 +98,6 @@ joblib.dump(hierarchical_clf,'model.joblib')
 def predict_text(text):
   y_pred_cat1, y_pred_cat2, y_pred_cat3 = hierarchical_clf.predict([text])
   return y_pred_cat1[0], y_pred_cat2[0], y_pred_cat3[0]
-#model = joblib.load('app/model.joblib')
 
 class Comment(BaseModel):
     text: constr(strict=True)
